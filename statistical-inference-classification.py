@@ -22,3 +22,10 @@ knn = KNeighborsClassifier()
 knn.fit(iris_X_train, iris_y_train)
 knn.predict(iris_X_test)
 iris_y_test
+
+### regression
+boston = datasets.load_boston()
+boston_X_train = boston.data[:-20]
+boston_X_test  = boston.data[-20:]
+boston_y_train = boston.target[:-20]
+boston_y_test  = boston.target[-20:]
