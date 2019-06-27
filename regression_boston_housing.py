@@ -2,7 +2,10 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 from sklearn import datasets
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.pipeline import Pipeline
 
 def get_boston_data() -> pd.DataFrame:
     # load boston boston data into pandas DataFrame
@@ -14,39 +17,44 @@ def get_boston_data() -> pd.DataFrame:
 
 boston, descr = get_boston_data()
 
-# stratified random sample based on the RM variable
-from sklearn.model_selection import StratifiedShuffleSplit
-# label records according to RM quintile
-boston["RM_cat"] = pd.qcut(boston['RM'], 5, labels=False)
-# sample according to RM quintile
-split = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-for train_index, test_index in split.split(boston, boston["RM_cat"]):
-    strat_train_set = boston.iloc[train_index]
-    strat_test_set = boston.iloc[test_index]
+# transform CHAS from float to category
+boston['CHAS'] = boston['CHAS'].astype('category')
 
-# remove RM_cat column from test/training sets
-for set_ in (strat_train_set, strat_test_set):
-    set_.drop('RM_cat', axis=1, inplace=True)
+# stratified random sample based on MEDVAL, the target variable
+def stratified_sample(df: pd.DataFrame, col: str, cats: int, n_splits: int, test_size: float) -> (pd.DataFrame, pd.DataFrame):
+    # label records according to col quintiles
+    cut_column = col + '_cut'
+    df[cut_column] = pd.qcut(df[col], 5, labels=False)
 
-# copy training data for data exploration
-boston = strat_train_set.copy()
+    # sample according to RM quintile
+    split = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, random_state=42)
+    for train_index, test_index in split.split(df, df[cut_column]):
+        strat_train_set = df.iloc[train_index]
+        strat_test_set = df.iloc[test_index]
+
+    # remove RM_cat column from test/training sets
+    for set_ in (strat_train_set, strat_test_set):
+        set_.drop(cut_column, axis=1, inplace=True)
+
+    return strat_train_set, strat_test_set
+
+train, test = stratified_sample(boston, 'MEDVAL', 5, 1, 0.2)
+X = train.drop('MEDVAL', axis=1)
+y = train['MEDVAL'].copy()
 
 
-# find variables with highest correlation to MEDVAL
-corr_high = corr_matrix['MEDVAL'][corr_matrix['MEDVAL'].abs() > 0.5]
-# MEDVAL is truncated at 50
-# consider dropping these data points
+# numeric feature pipeline
+num_pipeline = Pipeline([
+    ('std_scaler', StandardScaler())
+])
 
-boston = strat_train_set.drop('MEDVAL', axis=1)
-boston_labels = strat_train_set['MEDVAL'].copy()
+# list of numeric and categorical features, respectively
+num_cols = list(X.select_dtypes(include=['float']))
+cat_cols = list(X.select_dtypes(include=['category']))
 
-def chas_cats():
-    """
-    transform CHAS into a string and then 1-hot encode
-    """
-    chas_cat = pd.DataFrame(pd.cut(boston['CHAS'], bins=2, labels=False))
-    cat_encoder = OneHotEncoder()
-    chas_cat_1hot = cat_encoder.fit_transform(chas_cat)
-    return chas_cat_1hot
+pipeline = ColumnTransformer([
+    ('num', num_pipeline, num_cols),
+    ('cat', OneHotEncoder(), cat_cols)
+])
 
-chas_cat_1hot = chas_cats()
+X_prepared = pipeline.fit_transform(X)
