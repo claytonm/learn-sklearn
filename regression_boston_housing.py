@@ -6,7 +6,8 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.pipeline import Pipeline
-
+from sklearn.metrics import mean_squared_error
+from sklearn.tree import DecisionTreeRegressor
 def get_boston_data() -> pd.DataFrame:
     # load boston boston data into pandas DataFrame
     dt = datasets.load_boston()
@@ -58,3 +59,16 @@ pipeline = ColumnTransformer([
 ])
 
 X_prepared = pipeline.fit_transform(X)
+
+from sklearn.linear_model import LinearRegression
+
+lin_reg = LinearRegression()
+lin_reg.fit(X_prepared, y)
+
+pred_train = lin_reg.predict(X_prepared)
+np.sqrt(mean_squared_error(y, pred_train)) # 4.4
+
+tree_reg = DecisionTreeRegressor()
+tree_reg.fit(X_prepared, y)
+pred_train = tree_reg.predict(X_prepared)
+np.sqrt(mean_squared_error(y, pred_train)) # 0.0!
