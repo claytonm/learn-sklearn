@@ -4,10 +4,14 @@ import pandas as pd
 from sklearn import datasets
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.compose import ColumnTransformer
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+import rpy2.robjects.lib.ggplot2 as ggplot2
+
 def get_boston_data() -> pd.DataFrame:
     # load boston boston data into pandas DataFrame
     dt = datasets.load_boston()
@@ -22,7 +26,11 @@ boston, descr = get_boston_data()
 boston['CHAS'] = boston['CHAS'].astype('category')
 
 # stratified random sample based on MEDVAL, the target variable
-def stratified_sample(df: pd.DataFrame, col: str, cats: int, n_splits: int, test_size: float) -> (pd.DataFrame, pd.DataFrame):
+def stratified_sample(df: pd.DataFrame,
+                      col: str,
+                      cats: int,
+                      n_splits: int,
+                      test_size: float) -> (pd.DataFrame, pd.DataFrame):
     # label records according to col quintiles
     cut_column = col + '_cut'
     df[cut_column] = pd.qcut(df[col], 5, labels=False)
@@ -43,7 +51,6 @@ train, test = stratified_sample(boston, 'MEDVAL', 5, 1, 0.2)
 X = train.drop('MEDVAL', axis=1)
 y = train['MEDVAL'].copy()
 
-
 # numeric feature pipeline
 num_pipeline = Pipeline([
     ('std_scaler', StandardScaler())
@@ -60,15 +67,17 @@ pipeline = ColumnTransformer([
 
 X_prepared = pipeline.fit_transform(X)
 
-from sklearn.linear_model import LinearRegression
-
 lin_reg = LinearRegression()
-lin_reg.fit(X_prepared, y)
-
-pred_train = lin_reg.predict(X_prepared)
-np.sqrt(mean_squared_error(y, pred_train)) # 4.4
-
 tree_reg = DecisionTreeRegressor()
-tree_reg.fit(X_prepared, y)
-pred_train = tree_reg.predict(X_prepared)
-np.sqrt(mean_squared_error(y, pred_train)) # 0.0!
+rf_reg = RandomForestRegressor()
+
+def cv_compare(models):
+    results = []
+    for model in models:
+        scores = cross_val_score(model, X_prepared, y, scoring='neg_mean_squared_error', cv=5)
+        scores_sqrt = np.mean(np.sqrt(-scores))
+        scores_std = np.std(np.sqrt(-scores))
+        results.append([type(model), scores_sqrt, scores_std])
+    return pd.DataFrame(results, columns=['type', 'rmse', 'std'])
+
+results = cv_compare([lin_reg, tree_reg, rf_reg])
